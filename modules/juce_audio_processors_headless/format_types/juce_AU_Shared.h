@@ -394,6 +394,10 @@ struct AudioUnitHelpers
 
     static std::set<Channels> getAUChannelInfo (const AudioProcessor& processor)
     {
+       #ifndef kAudioUnitType_MIDIProcessor
+        #define kAudioUnitType_MIDIProcessor 'aumi'
+       #endif
+
        #ifdef JucePlugin_AUMainType
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfour-char-constants")
         if constexpr (JucePlugin_AUMainType == kAudioUnitType_MIDIProcessor)
