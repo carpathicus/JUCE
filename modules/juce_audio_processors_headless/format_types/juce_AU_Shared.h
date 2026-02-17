@@ -402,7 +402,7 @@ struct AudioUnitHelpers
 
        #ifdef JucePlugin_AUMainType
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfour-char-constants")
-        if constexpr (JucePlugin_AUMainType == kAudioUnitType_MIDIProcessor)
+        if constexpr (false) // JucePlugin_AUMainType == kAudioUnitType_MIDIProcessor)
         {
             // A MIDI effect requires an output bus in order to determine the sample rate.
             // No audio will be written to the output bus, so it can have any number of channels.
