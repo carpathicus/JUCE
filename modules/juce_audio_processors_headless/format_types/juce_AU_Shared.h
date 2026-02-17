@@ -48,6 +48,10 @@
  #define JUCE_APPLE_MIDI_EVENT_LIST_SUPPORTED 0
 #endif
 
+#ifndef kAudioUnitType_MIDIProcessor
+ #define kAudioUnitType_MIDIProcessor 'aumi'
+#endif
+
 namespace juce
 {
 
@@ -394,9 +398,7 @@ struct AudioUnitHelpers
 
     static std::set<Channels> getAUChannelInfo (const AudioProcessor& processor)
     {
-       #ifndef kAudioUnitType_MIDIProcessor
-        #define kAudioUnitType_MIDIProcessor 'aumi'
-       #endif
+
 
        #ifdef JucePlugin_AUMainType
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfour-char-constants")
