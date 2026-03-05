@@ -1359,7 +1359,8 @@ private:
     static Steinberg::int32 findClassMatchingDescription (VSTComSmartPtr<IPluginFactory> factory, const PluginDescription& desc)
     {
         const auto numClasses = factory->countClasses();
-        Steinberg::int32 nameOnlyMatch = numClasses;  // fallback for minimal descriptions
+        Steinberg::int32 nameOnlyMatch = numClasses;   // exact name, wrong uid
+        Steinberg::int32 firstEffectClass = numClasses; // any audio effect class
 
         for (auto i = decltype (numClasses){}; i < numClasses; ++i)
         {
@@ -1369,6 +1370,10 @@ private:
             if (std::strcmp (info.category, kVstAudioEffectClass) != 0)
                 continue;
 
+            // Track the first audio effect class we encounter
+            if (firstEffectClass == numClasses)
+                firstEffectClass = i;
+
             const auto uniqueId = getHashForRange (getNormalisedTUID (info.cid));
             const auto deprecatedUid = getHashForRange (info.cid);
 
@@ -1376,18 +1381,22 @@ private:
                 continue;
 
             if (uniqueId == desc.uniqueId || deprecatedUid == desc.deprecatedUid)
-                return i;   // exact match
+                return i;   // exact match (name + uid)
 
-            // Remember name-only match as fallback (for lightweight-scanned descriptions
-            // where uniqueId was not available at scan time).
+            // Remember name-only match as fallback
             if (nameOnlyMatch == numClasses)
                 nameOnlyMatch = i;
         }
 
-        // If the description was created by a lightweight scan (uniqueId == 0),
-        // accept a name-only match so the user can still load the plugin.
-        if (desc.uniqueId == 0 && nameOnlyMatch != numClasses)
-            return nameOnlyMatch;
+        // For lightweight-scanned descriptions (uniqueId == 0), accept
+        // progressively weaker matches so the user can load the plugin.
+        if (desc.uniqueId == 0)
+        {
+            if (nameOnlyMatch != numClasses)
+                return nameOnlyMatch;       // name matched, uid was unknown
+            if (firstEffectClass != numClasses)
+                return firstEffectClass;    // filename ≠ class name; use first class
+        }
 
         return numClasses;
     }
