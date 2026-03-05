@@ -56,6 +56,9 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
     if (! fileMightContainThisPluginType (fileOrIdentifier))
         return;
 
+    // ---------------------------------------------------------------
+    // Fast path: read moduleinfo.json (no binary loading).
+    // ---------------------------------------------------------------
     if (const auto fast = DescriptionLister::findDescriptionsFast (File (fileOrIdentifier)); ! fast.empty())
     {
         for (const auto& d : fast)
@@ -64,29 +67,55 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
         return;
     }
 
-    for (const auto& file : getLibraryPaths (*this, fileOrIdentifier))
+    // ---------------------------------------------------------------
+    // Fallback: moduleinfo.json is missing (older plugins).
+    // Instead of loading the plugin binary (which can crash/freeze),
+    // create a minimal description from the filename.  The plugin
+    // will be fully probed when the user actually loads it.
+    // ---------------------------------------------------------------
+    File vst3File (fileOrIdentifier);
+
+    auto* desc = new PluginDescription();
+    desc->name                = vst3File.getFileNameWithoutExtension();
+    desc->descriptiveName     = desc->name;
+    desc->pluginFormatName    = "VST3";
+    desc->fileOrIdentifier    = fileOrIdentifier;
+    desc->lastFileModTime     = vst3File.getLastModificationTime();
+    desc->lastInfoUpdateTime  = Time::getCurrentTime();
+    desc->uniqueId            = desc->name.hashCode();
+    desc->deprecatedUid       = desc->uniqueId;
+    desc->isInstrument        = false;
+    desc->numInputChannels    = 0;
+    desc->numOutputChannels   = 0;
+    desc->category            = "Effect";
+
+    // Try to extract manufacturer from the Info.plist if available
+    auto plistFile = vst3File.getChildFile ("Contents").getChildFile ("Info.plist");
+    if (plistFile.existsAsFile())
     {
-        /**
-            Since there is no apparent indication if a VST3 plugin is a shell or not,
-            we're stuck iterating through a VST3's factory, creating a description
-            for every housed plugin.
-        */
-
-        auto handle = RefCountedDllHandle::getHandle (file);
-
-        if (handle == nullptr)
-            continue;
-
-        auto pluginFactory = handle->getPluginFactory();
-
-        if (pluginFactory == nullptr)
-            continue;
-
-        VSTComSmartPtr host { new VST3HostContextHeadless(), IncrementRef::yes };
-
-        for (const auto& d : DescriptionLister::findDescriptionsSlow (*host, *pluginFactory, File (file)))
-            results.add (new PluginDescription (d));
+        if (auto xml = parseXML (plistFile))
+        {
+            if (auto* dict = xml->getChildByName ("dict"))
+            {
+                bool nextIsManufacturer = false;
+                for (auto* child : dict->getChildIterator())
+                {
+                    if (child->isTextElement()) continue;
+                    if (child->hasTagName ("key") && child->getAllSubText().trim() == "CFBundleGetInfoString")
+                        nextIsManufacturer = true;
+                    else if (nextIsManufacturer && child->hasTagName ("string"))
+                    {
+                        desc->manufacturerName = child->getAllSubText().trim();
+                        break;
+                    }
+                    else
+                        nextIsManufacturer = false;
+                }
+            }
+        }
     }
+
+    results.add (desc);
 }
 
 void VST3PluginFormatHeadless::createARAFactoryAsync (const PluginDescription& description, ARAFactoryCreationCallback callback)
