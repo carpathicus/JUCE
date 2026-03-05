@@ -45,25 +45,65 @@ void AudioUnitPluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescri
     if (! fileMightContainThisPluginType (fileOrIdentifier))
         return;
 
-    PluginDescription desc;
-    desc.fileOrIdentifier = fileOrIdentifier;
-    desc.uniqueId = desc.deprecatedUid = 0;
+    // ---------------------------------------------------------------
+    // Lightweight scan: query the AudioComponent registry for metadata
+    // WITHOUT instantiating the plugin.  This mirrors what Logic Pro
+    // does and avoids crashes / freezes from misbehaving plugin code.
+    // ---------------------------------------------------------------
 
-    if (MessageManager::getInstance()->isThisTheMessageThread()
-          && requiresUnblockedMessageThreadDuringCreation (desc))
+    AudioComponentDescription componentDesc;
+    String pluginName, version, manufacturer;
+
+    if (! AudioUnitFormatHelpers::getComponentDescFromIdentifier (fileOrIdentifier, componentDesc,
+                                                                  pluginName, version, manufacturer)
+        && ! AudioUnitFormatHelpers::getComponentDescFromFile (fileOrIdentifier, componentDesc,
+                                                               pluginName, version, manufacturer))
+    {
+        return;
+    }
+
+    AudioComponent auComp = AudioComponentFindNext (nullptr, &componentDesc);
+    if (auComp == nullptr)
         return;
 
-    try
-    {
-        auto createdInstance = createInstanceFromDescription (desc, 44100.0, 512);
+    // Re-read name / manufacturer in case getComponentDescFromFile was used
+    if (pluginName.isEmpty() || manufacturer.isEmpty())
+        AudioUnitFormatHelpers::getNameAndManufacturer (auComp, pluginName, manufacturer);
 
-        if (auto auInstance = dynamic_cast<AudioUnitPluginInstanceHeadless*> (createdInstance.get()))
-            results.add (new PluginDescription (auInstance->getPluginDescription()));
-    }
-    catch (...)
+    // Version (if not yet populated)
+    if (version.isEmpty())
     {
-        // crashed while loading...
+        UInt32 versionNum = 0;
+        if (AudioComponentGetVersion (auComp, &versionNum) == noErr)
+        {
+            version << (int) (versionNum >> 16) << "."
+                    << (int) ((versionNum >> 8) & 0xff) << "."
+                    << (int) (versionNum & 0xff);
+        }
     }
+
+    auto* desc = new PluginDescription();
+    desc->name                = pluginName;
+    desc->descriptiveName     = pluginName;
+    desc->fileOrIdentifier    = AudioUnitFormatHelpers::createPluginIdentifier (componentDesc);
+    desc->uniqueId = desc->deprecatedUid
+        = ((int) componentDesc.componentType)
+        ^ ((int) componentDesc.componentSubType)
+        ^ ((int) componentDesc.componentManufacturer);
+    desc->lastFileModTime     = Time();
+    desc->lastInfoUpdateTime  = Time::getCurrentTime();
+    desc->pluginFormatName    = "AudioUnit";
+    desc->category            = AudioUnitFormatHelpers::getCategory (componentDesc.componentType);
+    desc->manufacturerName    = manufacturer;
+    desc->version             = version;
+    desc->isInstrument        = (componentDesc.componentType == kAudioUnitType_MusicDevice);
+
+    // Channel counts are unknown without instantiation; they will be
+    // determined when the plugin is actually loaded for use.
+    desc->numInputChannels    = 0;
+    desc->numOutputChannels   = 0;
+
+    results.add (desc);
 }
 
 void AudioUnitPluginFormatHeadless::createPluginInstance (const PluginDescription& desc,
