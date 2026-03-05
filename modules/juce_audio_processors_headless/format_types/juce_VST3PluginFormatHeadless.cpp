@@ -64,6 +64,39 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
         return;
     }
 
+   #if JUCE_MAC
+    // ---------------------------------------------------------------
+    // macOS-only:  Skip binary loading during scanning.
+    //
+    // Litmus runs inside Apple's AUHostingServiceXPC_arrow, a
+    // sandboxed XPC process.  Loading VST3 binaries here triggers
+    // bundleEntry() / InitDll() code that some plugins (e.g.
+    // Kilohearts HeartCore) use to set up timers or UI resources.
+    // Those timers crash in the restricted XPC environment.
+    //
+    // Instead, create a minimal description.  The plugin will be
+    // fully loaded when the user selects it for use, at which point
+    // the host environment is properly set up.
+    // ---------------------------------------------------------------
+    File vst3File (fileOrIdentifier);
+
+    auto* desc = new PluginDescription();
+    desc->name                = vst3File.getFileNameWithoutExtension();
+    desc->descriptiveName     = desc->name;
+    desc->pluginFormatName    = "VST3";
+    desc->fileOrIdentifier    = fileOrIdentifier;
+    desc->lastFileModTime     = vst3File.getLastModificationTime();
+    desc->lastInfoUpdateTime  = Time::getCurrentTime();
+    desc->uniqueId            = 0;
+    desc->deprecatedUid       = 0;
+    desc->isInstrument        = false;
+    desc->numInputChannels    = 0;
+    desc->numOutputChannels   = 0;
+    desc->category            = "Effect";
+
+    results.add (desc);
+
+   #else
     for (const auto& file : getLibraryPaths (*this, fileOrIdentifier))
     {
         /**
@@ -87,6 +120,7 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
         for (const auto& d : DescriptionLister::findDescriptionsSlow (*host, *pluginFactory, File (file)))
             results.add (new PluginDescription (d));
     }
+   #endif
 }
 
 void VST3PluginFormatHeadless::createARAFactoryAsync (const PluginDescription& description, ARAFactoryCreationCallback callback)

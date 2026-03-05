@@ -1359,6 +1359,7 @@ private:
     static Steinberg::int32 findClassMatchingDescription (VSTComSmartPtr<IPluginFactory> factory, const PluginDescription& desc)
     {
         const auto numClasses = factory->countClasses();
+        Steinberg::int32 nameOnlyMatch = numClasses;  // fallback for minimal descriptions
 
         for (auto i = decltype (numClasses){}; i < numClasses; ++i)
         {
@@ -1374,11 +1375,19 @@ private:
             if (toString (info.name).trim() != desc.name)
                 continue;
 
-            if (uniqueId != desc.uniqueId && deprecatedUid != desc.deprecatedUid)
-                continue;
+            if (uniqueId == desc.uniqueId || deprecatedUid == desc.deprecatedUid)
+                return i;   // exact match
 
-            return i;
+            // Remember name-only match as fallback (for lightweight-scanned descriptions
+            // where uniqueId was not available at scan time).
+            if (nameOnlyMatch == numClasses)
+                nameOnlyMatch = i;
         }
+
+        // If the description was created by a lightweight scan (uniqueId == 0),
+        // accept a name-only match so the user can still load the plugin.
+        if (desc.uniqueId == 0 && nameOnlyMatch != numClasses)
+            return nameOnlyMatch;
 
         return numClasses;
     }
