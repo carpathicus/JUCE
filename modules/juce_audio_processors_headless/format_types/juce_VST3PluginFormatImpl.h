@@ -1043,12 +1043,20 @@ struct DescriptionLister
                     }
                     else
                     {
-                        jassertfalse;
+                        // Component failed to initialize in this scanning context (e.g. needs
+                        // audio resources not available headlessly).  Create a description with
+                        // 0 channels — same as the moduleinfo.json fast path does for plugins
+                        // whose channel layout is not statically known.
+                        createPluginDescription (desc, file, companyName, name,
+                                                 info, info2.get(), infoW.get(), 0, 0);
                     }
                 }
                 else
                 {
-                    jassertfalse;
+                    // Failed to instantiate component — still populate description from
+                    // class info so the plugin at least appears in the scanner results.
+                    createPluginDescription (desc, file, companyName, name,
+                                             info, info2.get(), infoW.get(), 0, 0);
                 }
             }
 
