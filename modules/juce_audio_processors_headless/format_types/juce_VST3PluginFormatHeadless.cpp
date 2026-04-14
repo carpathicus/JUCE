@@ -56,12 +56,17 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
     if (! fileMightContainThisPluginType (fileOrIdentifier))
         return;
 
-    if (const auto fast = DescriptionLister::findDescriptionsFast (File (fileOrIdentifier)); ! fast.empty())
-    {
-        for (const auto& d : fast)
-            results.add (new PluginDescription (d));
+    const bool isShell = File (fileOrIdentifier).getFileNameWithoutExtension().containsIgnoreCase ("Shell");
 
-        return;
+    if (! isShell)
+    {
+        if (const auto fast = DescriptionLister::findDescriptionsFast (File (fileOrIdentifier)); ! fast.empty())
+        {
+            for (const auto& d : fast)
+                results.add (new PluginDescription (d));
+
+            return;
+        }
     }
 
     // Binary loading is only called for VST3 shell plugins (e.g. WaveShell) — PluginScanner
