@@ -973,6 +973,9 @@ struct DescriptionLister
         factory.getFactoryInfo (&factoryInfo);
         auto companyName = toString (factoryInfo.vendor).trim();
 
+        if (VSTComSmartPtr<IPluginFactory3> pf3; pf3.loadFrom (&factory))
+            pf3->setHostContext (host.getFUnknown());
+
         auto numClasses = factory.countClasses();
 
         // Every ARA::IMainFactory must have a matching IComponent.
