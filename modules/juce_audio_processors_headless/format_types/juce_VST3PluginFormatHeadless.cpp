@@ -56,17 +56,37 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
     if (! fileMightContainThisPluginType (fileOrIdentifier))
         return;
 
+    const auto addIfMissing = [] (OwnedArray<PluginDescription>& list, const PluginDescription& description)
+    {
+        for (auto* existing : list)
+        {
+            if (existing == nullptr)
+                continue;
+
+            if (existing->fileOrIdentifier == description.fileOrIdentifier
+                && existing->name == description.name)
+                return;
+        }
+
+        list.add (new PluginDescription (description));
+    };
+
     const bool isShell = File (fileOrIdentifier).getFileNameWithoutExtension().containsIgnoreCase ("Shell");
+    std::vector<PluginDescription> shellModuleInfoDescriptions;
 
     if (! isShell)
     {
         if (const auto fast = DescriptionLister::findDescriptionsFast (File (fileOrIdentifier)); ! fast.empty())
         {
             for (const auto& d : fast)
-                results.add (new PluginDescription (d));
+                addIfMissing (results, d);
 
             return;
         }
+    }
+    else
+    {
+        shellModuleInfoDescriptions = DescriptionLister::findDescriptionsFast (File (fileOrIdentifier));
     }
 
     // Binary loading is only called for VST3 shell plugins (e.g. WaveShell) — PluginScanner
@@ -94,7 +114,15 @@ void VST3PluginFormatHeadless::findAllTypesForFile (OwnedArray<PluginDescription
         VSTComSmartPtr host { new VST3HostContextHeadless(), IncrementRef::yes };
 
         for (const auto& d : DescriptionLister::findDescriptionsSlow (*host, *pluginFactory, File (file)))
-            results.add (new PluginDescription (d));
+            addIfMissing (results, d);
+    }
+
+    for (const auto& d : shellModuleInfoDescriptions)
+    {
+        if (d.name.containsIgnoreCase ("WaveShell"))
+            continue;
+
+        addIfMissing (results, d);
     }
 }
 

@@ -969,12 +969,13 @@ struct DescriptionLister
         std::vector<PluginDescription> result;
 
         StringArray foundNames;
-        PFactoryInfo factoryInfo;
-        factory.getFactoryInfo (&factoryInfo);
-        auto companyName = toString (factoryInfo.vendor).trim();
 
         if (VSTComSmartPtr<IPluginFactory3> pf3; pf3.loadFrom (&factory))
             pf3->setHostContext (host.getFUnknown());
+
+        PFactoryInfo factoryInfo;
+        factory.getFactoryInfo (&factoryInfo);
+        auto companyName = toString (factoryInfo.vendor).trim();
 
         auto numClasses = factory.countClasses();
 
