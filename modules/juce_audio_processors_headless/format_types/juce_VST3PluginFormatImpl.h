@@ -969,8 +969,11 @@ struct DescriptionLister
         std::vector<PluginDescription> result;
 
         StringArray foundNames;
+        const auto isWavesShell = file.getFileName().containsIgnoreCase ("WaveShell");
 
-        if (VSTComSmartPtr<IPluginFactory3> pf3; pf3.loadFrom (&factory))
+        // Waves exposes the full WaveShell class list before host context is set.
+        // Setting it early can hide older products from enumeration.
+        if (VSTComSmartPtr<IPluginFactory3> pf3; ! isWavesShell && pf3.loadFrom (&factory))
             pf3->setHostContext (host.getFUnknown());
 
         PFactoryInfo factoryInfo;
@@ -1030,6 +1033,15 @@ struct DescriptionLister
 
             PluginDescription desc;
 
+            if (isWavesShell)
+            {
+                // Avoid instantiating hundreds of Waves sub-plugins during discovery.
+                // The class metadata is enough for the browser, and real creation is
+                // validated later when the user loads a plugin.
+                createPluginDescription (desc, file, companyName, name,
+                                         info, info2.get(), infoW.get(), 0, 0);
+            }
+            else
             {
                 VSTComSmartPtr<Vst::IComponent> component;
 
@@ -1586,7 +1598,7 @@ struct VST3ComponentHolder
 
         const auto classIdx = module.getClassIndex();
 
-        if (classIdx == factory->countClasses())
+        if (classIdx >= factory->countClasses())
         {
             jassertfalse;
             return;
@@ -1614,7 +1626,9 @@ struct VST3ComponentHolder
 
         if (pf3.loadFrom (factory.get()))
         {
-            pf3->setHostContext (host->getFUnknown());
+            if (! module.getFile().getFileName().containsIgnoreCase ("WaveShell"))
+                pf3->setHostContext (host->getFUnknown());
+
             infoW.reset (new PClassInfoW());
             pf3->getClassInfoUnicode (classIdx, infoW.get());
         }
@@ -1664,12 +1678,16 @@ struct VST3ComponentHolder
         VSTComSmartPtr<IPluginFactory3> pf3;
         pf3.loadFrom (factory.get());
 
-        if (pf3 != nullptr)
+        const auto isWavesShell = module.getFile().getFileName().containsIgnoreCase ("WaveShell");
+
+        // For Waves, keep the factory in its full-enumeration state until we have
+        // captured class info and created the requested component by CID.
+        if (pf3 != nullptr && ! isWavesShell)
             pf3->setHostContext (host->getFUnknown());
 
         const auto classIdx = module.getClassIndex();
 
-        if (classIdx == factory->countClasses())
+        if (classIdx >= factory->countClasses())
             return false;
 
         PClassInfo info;
