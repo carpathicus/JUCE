@@ -1719,6 +1719,20 @@ public:
 
         void parentSizeChanged() override
         {
+            if (updatingHostSize || applyHostProvidedSize())
+                return;
+
+            resizeHostWindow();
+
+            if (auto* editor = getChildComponent (0))
+                editor->repaint();
+        }
+
+        void resized() override
+        {
+            if (updatingHostSize || applyHostProvidedSize())
+                return;
+
             resizeHostWindow();
 
             if (auto* editor = getChildComponent (0))
@@ -1732,6 +1746,8 @@ public:
             if (lastBounds != b)
             {
                 lastBounds = b;
+
+                const ScopedValueSetter<bool> scoped (updatingHostSize, true);
                 setSize (jmax (32, b.getWidth()), jmax (32, b.getHeight()));
 
                 resizeHostWindow();
@@ -1781,6 +1797,9 @@ public:
             auto rect = convertToHostBounds (makeCGRect (lastBounds));
             auto* view = (NSView*) getWindowHandle();
 
+            if (view == nil || [view superview] == nil)
+                return;
+
             auto superRect = [[view superview] frame];
             superRect.size.width  = rect.size.width;
             superRect.size.height = rect.size.height;
@@ -1793,8 +1812,68 @@ public:
         }
 
     private:
+        bool applyHostProvidedSize()
+        {
+            auto* editor = dynamic_cast<AudioProcessorEditor*> (getChildComponent (0));
+
+            if (editor == nullptr || ! editor->isResizable())
+                return false;
+
+            auto* view = (NSView*) getWindowHandle();
+
+            if (view == nil || [view superview] == nil)
+                return false;
+
+            auto requestedBounds = getLocalBounds().withPosition (0, 0);
+            auto hostBounds = [[view superview] bounds];
+            auto pluginBounds = convertFromHostBounds (hostBounds);
+            const auto requestedHostWidth = roundToInt (pluginBounds.size.width);
+            const auto requestedHostHeight = roundToInt (pluginBounds.size.height);
+
+            if (requestedHostWidth > 0 && requestedHostHeight > 0)
+            {
+                const Rectangle<int> requestedHostBounds { jmax (32, requestedHostWidth),
+                                                           jmax (32, requestedHostHeight) };
+
+                if (requestedBounds == lastBounds || requestedHostBounds != lastBounds)
+                    requestedBounds = requestedHostBounds;
+            }
+
+            requestedBounds.setSize (jmax (32, requestedBounds.getWidth()),
+                                     jmax (32, requestedBounds.getHeight()));
+
+            auto constrainedBounds = requestedBounds;
+            const auto maxLimits = std::numeric_limits<int>::max() / 2;
+
+            if (auto* constrainer = editor->getConstrainer())
+            {
+                constrainer->checkBounds (constrainedBounds,
+                                          editor->getBounds().withZeroOrigin(),
+                                          { maxLimits, maxLimits },
+                                          false, false, true, true);
+                constrainedBounds = constrainedBounds.withPosition (0, 0);
+            }
+
+            if (constrainedBounds == lastBounds && editor->getBounds().withZeroOrigin() == constrainedBounds)
+            {
+                editor->repaint();
+                return true;
+            }
+
+            lastBounds = constrainedBounds;
+
+            const ScopedValueSetter<bool> scoped (updatingHostSize, true);
+            setSize (jmax (32, constrainedBounds.getWidth()), jmax (32, constrainedBounds.getHeight()));
+            editor->setBounds (constrainedBounds);
+            resizeHostWindow();
+            editor->repaint();
+
+            return true;
+        }
+
         ScopedJuceInitialiser_GUI scopedInitialiser;
         Rectangle<int> lastBounds;
+        bool updatingHostSize = false;
 
         JUCE_DECLARE_NON_COPYABLE (EditorCompHolder)
     };
