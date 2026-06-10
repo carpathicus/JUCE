@@ -1791,14 +1791,15 @@ public:
 
         void resizeHostWindow()
         {
-            [CATransaction begin];
-            [CATransaction setValue: (id) kCFBooleanTrue forKey:kCATransactionDisableActions];
-
-            auto rect = convertToHostBounds (makeCGRect (lastBounds));
             auto* view = (NSView*) getWindowHandle();
 
             if (view == nil || [view superview] == nil)
                 return;
+
+            [CATransaction begin];
+            [CATransaction setValue: (id) kCFBooleanTrue forKey:kCATransactionDisableActions];
+
+            auto rect = convertToHostBounds (makeCGRect (lastBounds));
 
             auto superRect = [[view superview] frame];
             superRect.size.width  = rect.size.width;
